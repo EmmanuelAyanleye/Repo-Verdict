@@ -1,6 +1,7 @@
 """Django views for RepoVerdict."""
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -49,11 +50,11 @@ SOURCE_EXTENSIONS = {
 def _repo_text(repo: dict) -> str:
     """Combine repo name, description and topics into a single lowercase string."""
     parts = [
-        repo.get("name", ""),
-        repo.get("description", ""),
-        " ".join(repo.get("topics", [])),
+        repo.get("name") or "",
+        repo.get("description") or "",
+        " ".join(repo.get("topics", []) or []),
     ]
-    return " ".join(parts).lower()
+    return " ".join(p for p in parts if p).lower()
 
 
 def _surface_penalty(text: str) -> int:
@@ -314,7 +315,9 @@ def search_repos(request):
         # GitHub search does not support OR between qualifiers, so we run one query
         # per language. If the license set is small we include it in the query for
         # better precision; otherwise we filter client-side.
-        use_combinations = len(languages) * len(unique_licenses) <= 12
+        # We use max_pages=1 to stay well under GitHub's search rate limit
+        # (30 requests/min for authenticated users, 10 for unauthenticated).
+        use_combinations = len(languages) * len(unique_licenses) <= 6
         for language in languages:
             if use_combinations:
                 for license in unique_licenses:
@@ -325,6 +328,7 @@ def search_repos(request):
                         max_stars=max_stars,
                         pushed_after=pushed_after,
                         license=license,
+                        max_pages=1,
                     )
                     query_parts.append(query)
                     for repo in items:
@@ -332,6 +336,8 @@ def search_repos(request):
                             continue
                         seen.add(repo.get("id"))
                         all_repos.append(repo)
+                    # Short pacing to avoid search API burst limits.
+                    time.sleep(0.25)
             else:
                 query, items = client.search_repositories(
                     visibility=visibility,
@@ -339,6 +345,7 @@ def search_repos(request):
                     min_stars=min_stars,
                     max_stars=max_stars,
                     pushed_after=pushed_after,
+                    max_pages=1,
                 )
                 query_parts.append(query)
                 for repo in items:
@@ -350,6 +357,7 @@ def search_repos(request):
                         continue
                     seen.add(repo.get("id"))
                     all_repos.append(repo)
+                time.sleep(0.25)
     except GitHubRateLimitError as exc:
         return Response({"error": str(exc)}, status=429)
     except GitHubClientError as exc:
@@ -371,21 +379,18 @@ def search_repos(request):
         except (ValueError, TypeError):
             pass
 
-    # Enrich and score top candidates. We cannot score every result because each repo
-    # needs extra API calls for language stats and the file tree. Limit enrichment to
-    # the most promising candidates by star count.
-    ENRICH_CANDIDATES = 30
+    # Enrich and score top candidates. Each repo needs two extra API calls (languages
+    # and tree), so we keep the pool small to avoid rate limits and long waits.
     all_repos.sort(key=lambda r: r.get("stargazers_count", 0), reverse=True)
-    enrich_candidates = all_repos[:ENRICH_CANDIDATES]
+    if client.token:
+        max_workers = 6
+        enrich_candidates = all_repos[:15]
+    else:
+        # Unauthenticated rate limits are very tight; inspect fewer repos.
+        max_workers = 3
+        enrich_candidates = all_repos[:6]
 
     enriched: list[tuple[dict, dict]] = []
-    if client.token:
-        # With authentication we can afford to inspect more repos concurrently.
-        max_workers = 8
-    else:
-        # Unauthenticated rate limits are tight; inspect fewer repos sequentially-ish.
-        max_workers = 3
-        enrich_candidates = enrich_candidates[:12]
 
     def _fetch_repo_metrics(candidate: dict) -> tuple[dict, dict[str, int], list[dict]]:
         owner, repo_name = client.parse_repo_url(candidate["html_url"])

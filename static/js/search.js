@@ -189,68 +189,47 @@ form.addEventListener("submit", async (e) => {
   btnText.textContent = "Searching...";
   loadingPanel.style.display = "flex";
   loadingMessage.textContent = "Searching GitHub repositories...";
+  if (loadingQuery) loadingQuery.textContent = "";
+  if (searchProgress) searchProgress.style.width = "0%";
   errorSection.style.display = "none";
   resultsSection.style.display = "none";
 
   try {
-    const combinations = [];
-    for (const lang of languages) {
-      for (const lic of licenses) {
-        combinations.push({ languages: [lang], licenses: [lic] });
-      }
+    const response = await fetch("/api/search/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        visibility: visibility || null,
+        languages,
+        licenses,
+        min_stars: minStars,
+        max_stars: maxStars,
+        max_size_mb: maxSizeMb,
+        result_limit: Math.min(resultLimit, 100),
+        min_loc: isNaN(minLoc) ? 0 : minLoc,
+        require_architecture: requireArchitecture,
+        allow_surface: allowSurface,
+      }),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    let data;
+    if (contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(text ? `Server returned an error page. ${text.slice(0, 200)}` : "Server returned a non-JSON response.");
     }
 
-    let completed = 0;
-    loadingMessage.textContent = `Searching 0 of ${combinations.length} GitHub queries...`;
-    if (loadingQuery) loadingQuery.textContent = "";
-    if (searchProgress) searchProgress.style.width = "0%";
-
-    const results = await Promise.all(
-      combinations.map(async (combo) => {
-        const q = `is:${visibility || "public"} language:${combo.languages[0]} stars:>=${minStars}${combo.licenses[0] ? ` license:${combo.licenses[0].toLowerCase()}` : ""}`;
-        if (loadingQuery) loadingQuery.textContent = q;
-        const response = await fetch("/api/search/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            visibility: visibility || null,
-            ...combo,
-            min_stars: minStars,
-            max_stars: maxStars,
-            max_size_mb: maxSizeMb,
-            result_limit: Math.min(resultLimit, 100),
-            min_loc: isNaN(minLoc) ? 0 : minLoc,
-            require_architecture: requireArchitecture,
-            allow_surface: allowSurface,
-          }),
-        });
-        const data = await response.json();
-        completed++;
-        const pct = Math.round((completed / combinations.length) * 100);
-        loadingMessage.textContent = `Searched ${completed} of ${combinations.length} GitHub queries...`;
-        if (searchProgress) searchProgress.style.width = `${pct}%`;
-        if (!response.ok || data.error) {
-          throw new Error(data.error || "Search failed.");
-        }
-        return data.repositories || [];
-      })
-    );
-
-    const seen = new Set();
-    currentRepos = [];
-    for (const repos of results) {
-      for (const repo of repos) {
-        if (seen.has(repo.id)) continue;
-        seen.add(repo.id);
-        currentRepos.push(repo);
-      }
+    if (!response.ok || data.error) {
+      throw new Error(data.error || "Search failed.");
     }
-    currentRepos.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0));
-    currentRepos = currentRepos.slice(0, resultLimit);
+
+    currentRepos = (data.repositories || []).slice(0, resultLimit);
     currentPage = 1;
 
     resultCount.textContent = `${formatNumber(currentRepos.length)} repositories`;
-    searchQuery.textContent = `Searched ${combinations.length} GitHub queries for active, permissive repositories.`;
+    searchQuery.textContent = data.query || "Searched GitHub for active, permissive repositories.";
     displayPage();
     resultsSection.style.display = "flex";
   } catch (err) {
