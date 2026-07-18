@@ -1,10 +1,12 @@
 """Django views for RepoVerdict."""
 import json
+import math
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime, timedelta
+from typing import Any
 
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
@@ -77,6 +79,55 @@ def _depth_boost(text: str) -> int:
         if term in text:
             boost += 8
     return min(boost, 30)
+
+
+def _parse_github_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        return None
+
+
+def _basic_repo_score(repo: dict) -> dict[str, Any]:
+    """Return an honest metadata-only score when deep enrichment is unavailable."""
+    stars = int(repo.get("stargazers_count") or 0)
+    size = int(repo.get("size") or 0)
+    pushed_at = _parse_github_datetime(repo.get("pushed_at"))
+    days_old = (datetime.now() - pushed_at).days if pushed_at else None
+
+    stars_score = min(35.0, math.log10(stars + 1) / 5 * 35)
+    activity_score = 0.0
+    if days_old is not None:
+        activity_score = max(0.0, 25.0 * (1 - min(days_old, 365) / 365))
+    metadata_score = 0.0
+    if repo.get("language"):
+        metadata_score += 15
+    if repo.get("license"):
+        metadata_score += 15
+    if repo.get("description"):
+        metadata_score += 10
+    if size > 0:
+        metadata_score += min(15, math.log10(size + 1) / 5 * 15)
+
+    score = max(0.0, min(100.0, stars_score + activity_score + metadata_score))
+    return {
+        "primary_language": repo.get("language") or "",
+        "primary_loc": 0,
+        "source_file_count": 0,
+        "source_dir_count": 0,
+        "max_depth": 0,
+        "surface_penalty": 0,
+        "depth_boost": 0,
+        "loc_score": 0,
+        "architecture_score": 0,
+        "suitability_score": round(score, 1),
+        "architecture_ok": False,
+        "score_mode": "basic",
+        "score_available": True,
+        "score_reason": "Basic score from stars, recency, license, language and repository metadata.",
+    }
 
 
 def _compute_tree_stats(tree: list[dict], primary_language: str | None) -> dict[str, Any]:
@@ -177,6 +228,9 @@ def _score_repo(
         "architecture_score": round(depth_score, 1),
         "suitability_score": round(score, 1),
         "architecture_ok": architecture_ok,
+        "score_mode": "full",
+        "score_available": True,
+        "score_reason": "Full score from language LOC, file-tree architecture and repository metadata.",
     }
 
 
@@ -436,7 +490,7 @@ def search_repos(request):
     # If strict suitability filters removed everything, fall back to the original star-ranked
     # list so the user still sees some candidates and can adjust criteria.
     if not filtered:
-        filtered = [(r, _score_repo(r, {}, [], min_loc, False, True)) for r in all_repos[:result_limit]]
+        filtered = [(r, _basic_repo_score(r)) for r in all_repos[:result_limit]]
 
     final_repos: list[dict] = []
     for repo, metrics in filtered[:result_limit]:

@@ -50,6 +50,13 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+On Windows PowerShell, use:
+
+```powershell
+Copy-Item .env.example .env
+Set-Content -Path .env -Value "GITHUB_TOKEN=your_token_here" -Encoding utf8
+```
+
 4. Run migrations:
 
 ```bash
@@ -69,6 +76,11 @@ python manage.py runserver
 ```
 
 7. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+
+Do not open files from `templates/` directly in the browser; run the Django
+server and open the localhost URL so CSS, JavaScript, and API routes load
+correctly. Static assets are served by Django in development and by WhiteNoise
+when `DEBUG=False`.
 
 ## API usage
 

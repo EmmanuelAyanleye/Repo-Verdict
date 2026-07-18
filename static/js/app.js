@@ -158,7 +158,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
+    const data = await parseJsonResponse(response);
 
     if (!response.ok) {
       showError(data.error || `Request failed (${response.status})`);
@@ -175,6 +175,21 @@ form.addEventListener("submit", async (event) => {
     hideLoading();
   }
 });
+
+async function parseJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  const fallback = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return {
+    error: fallback
+      ? `Server returned a non-JSON response: ${fallback.slice(0, 240)}`
+      : "Server returned a non-JSON response.",
+  };
+}
 
 function setLoading(isLoading) {
   submitBtn.disabled = isLoading;

@@ -37,29 +37,51 @@ function formatSize(kb) {
   return `${mb} MB`;
 }
 
+function toNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text == null ? "" : String(text);
+  return div.innerHTML;
+}
+
 function renderRepo(repo) {
   const license = repo.license?.spdx_id || repo.license?.name || "Unknown";
   const updated = repo.pushed_at ? new Date(repo.pushed_at).toLocaleDateString() : "Unknown";
   const s = repo.suitability || {};
-  const loc = s.primary_loc ? formatNumber(s.primary_loc) : "Unknown";
-  const score = typeof s.suitability_score === "number" ? Math.round(s.suitability_score) : null;
-  const scoreBadge = score !== null
-    ? `<span class="badge" title="Suitability score: ${s.suitability_score}/100">Score ${score}</span>`
-    : "";
-  const archMeta = s.source_dir_count
-    ? `${formatNumber(s.source_dir_count)} dirs · depth ${s.max_depth}`
-    : "";
+  const locValue = toNumber(s.primary_loc);
+  const loc = locValue && locValue > 0 ? formatNumber(locValue) : "Unknown";
+  const scoreValue = toNumber(s.suitability_score);
+  const scoreMode = s.score_mode === "basic" ? "Basic score" : "Score";
+  const scoreTitle = s.score_reason || `Suitability score: ${scoreValue ?? "unknown"}/100`;
+  const scoreBadge = scoreValue !== null
+    ? `<span class="badge badge-score" title="${escapeHtml(scoreTitle)}">${scoreMode} ${Math.round(scoreValue)}</span>`
+    : `<span class="badge badge-muted" title="Repository could not be scored.">Unscored</span>`;
+  const dirCount = toNumber(s.source_dir_count);
+  const maxDepth = toNumber(s.max_depth);
+  const archMeta = dirCount && dirCount > 0
+    ? `${formatNumber(dirCount)} dirs · depth ${maxDepth ?? 0}`
+    : (s.score_mode === "basic" ? "Not inspected" : "—");
+  const fullName = escapeHtml(repo.full_name || repo.name || "Unknown repository");
+  const repoUrl = escapeHtml(repo.html_url || "#");
   return `
     <article class="repo-card">
       <div class="repo-header">
-        <a href="${repo.html_url}" target="_blank" rel="noopener" class="repo-name">${repo.full_name}</a>
+        <a href="${repoUrl}" target="_blank" rel="noopener" class="repo-name">${fullName}</a>
         ${scoreBadge}
       </div>
-      <p class="repo-description">${repo.description || "No description."}</p>
+      <p class="repo-description">${escapeHtml(repo.description || "No description.")}</p>
       <div class="repo-stats">
         <div class="repo-stat">
           <span class="repo-stat-label">Language</span>
-          <span class="repo-stat-value">${repo.language || "Unknown"}</span>
+          <span class="repo-stat-value">${escapeHtml(repo.language || "Unknown")}</span>
         </div>
         <div class="repo-stat">
           <span class="repo-stat-label">LOC</span>
@@ -71,7 +93,7 @@ function renderRepo(repo) {
         </div>
         <div class="repo-stat">
           <span class="repo-stat-label">License</span>
-          <span class="repo-stat-value">${license}</span>
+          <span class="repo-stat-value">${escapeHtml(license)}</span>
         </div>
         <div class="repo-stat">
           <span class="repo-stat-label">Stars</span>

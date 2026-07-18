@@ -762,6 +762,8 @@ select {
 .badge-committed { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
 .badge-active { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
 .badge-rejection { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+.badge-score { background: rgba(20, 184, 166, 0.15); color: #5eead4; }
+.badge-muted { background: rgba(107, 114, 128, 0.15); color: #d1d5db; }
 
 .relevance-bar {
   width: 100%;

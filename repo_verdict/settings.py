@@ -1,13 +1,43 @@
 """
 Django settings for repo_verdict project.
 """
+from io import StringIO
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
-load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv_file(path: Path) -> None:
+    """Load .env files written by common macOS/Linux/Windows editors.
+
+    Windows PowerShell's Out-File can create UTF-16 files by default. The stock
+    python-dotenv loader expects UTF-8, so a shared project could crash before
+    Django starts. Decode with a small set of common encodings and set values
+    without overriding real environment variables.
+    """
+    if not path.exists():
+        return
+
+    text = None
+    for encoding in ("utf-8-sig", "utf-8", "utf-16", "utf-16-le", "utf-16-be"):
+        try:
+            text = path.read_text(encoding=encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+
+    if text is None:
+        return
+
+    for key, value in dotenv_values(stream=StringIO(text)).items():
+        if key and value is not None and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv_file(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me-in-production")
 
@@ -28,6 +58,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -79,6 +110,15 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+WHITENOISE_USE_FINDERS = True
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
