@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RepoVerdict — GitHub Repository Search</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app">
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+          <span>RepoVerdict</span>
+        </div>
+        <div class="nav-links">
+          <a href="{% url 'index' %}" class="nav-link">Verdict</a>
+          <a href="{% url 'search' %}" class="nav-link active">Search</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-content">
+        <h1>Find permissive open-source repositories</h1>
+        <p>
+          Search GitHub for repositories that are recently active, well-starred, and carry a permissive license.
+        </p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel input-panel">
+        <form id="search-form" class="analyze-form">
+          <div class="form-section">
+            <h2 class="form-section-title">Search criteria</h2>
+            <div class="form-grid">
+              <div class="field-group">
+                <label for="visibility">Visibility</label>
+                <select id="visibility" name="visibility">
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                  <option value="">Any</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="min_stars">Minimum stars</label>
+                <input type="number" id="min_stars" name="min_stars" value="500" min="0" step="1" />
+              </div>
+              <div class="field-group">
+                <label for="max_stars">Maximum stars</label>
+                <input type="number" id="max_stars" name="max_stars" placeholder="Optional" min="0" step="1" />
+              </div>
+              <div class="field-group">
+                <label for="max_size_mb">Max repo size (MB)</label>
+                <input type="number" id="max_size_mb" name="max_size_mb" placeholder="Optional" min="0" step="1" />
+              </div>
+              <div class="field-group span-2">
+                <label>Languages</label>
+                <div class="checkbox-group" id="languages">
+                  <label class="checkbox"><input type="checkbox" value="TypeScript" checked /> TypeScript</label>
+                  <label class="checkbox"><input type="checkbox" value="JavaScript" checked /> JavaScript</label>
+                  <label class="checkbox"><input type="checkbox" value="Python" /> Python</label>
+                  <label class="checkbox"><input type="checkbox" value="Go" /> Go</label>
+                  <label class="checkbox"><input type="checkbox" value="Rust" /> Rust</label>
+                  <label class="checkbox"><input type="checkbox" value="C++" /> C++</label>
+                  <label class="checkbox"><input type="checkbox" value="Java" /> Java</label>
+                </div>
+              </div>
+              <div class="field-group span-2">
+                <label>Permissive licenses</label>
+                <div class="checkbox-group" id="licenses">
+                  <label class="checkbox"><input type="checkbox" value="MIT" checked /> MIT</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-2-Clause" /> BSD-2-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-3-Clause" /> BSD-3-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-4-Clause" /> BSD-4-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="Boost" /> Boost / BSL-1.0</label>
+                  <label class="checkbox"><input type="checkbox" value="Apache-2.0" checked /> Apache-2.0</label>
+                  <label class="checkbox"><input type="checkbox" value="Apache" /> Apache</label>
+                  <label class="checkbox"><input type="checkbox" value="CC-BY-4.0" /> CC-BY-4.0</label>
+                  <label class="checkbox"><input type="checkbox" value="CC-BY-3.0" /> CC-BY-3.0</label>
+                  <label class="checkbox"><input type="checkbox" value="CC-BY-2.0" /> CC-BY-2.0</label>
+                  <label class="checkbox"><input type="checkbox" value="CC-BY-1.0" /> CC-BY-1.0</label>
+                  <label class="checkbox"><input type="checkbox" value="GNU-All-permissive-Copying-License" /> GNU-All-permissive</label>
+                  <label class="checkbox"><input type="checkbox" value="BLAS" /> BLAS</label>
+                  <label class="checkbox"><input type="checkbox" value="Other" /> Other</label>
+                </div>
+              </div>
+              <div class="field-group span-2">
+                <label for="custom_license">Custom license (optional)</label>
+                <input type="text" id="custom_license" name="custom_license" placeholder="e.g. MPL-2.0, ISC" />
+                <p class="field-hint">Comma-separated license keys to add to the selected ones.</p>
+              </div>
+              <div class="field-group">
+                <label for="result_limit">Max results</label>
+                <input type="number" id="result_limit" name="result_limit" value="30" min="1" max="100" step="1" />
+              </div>
+              <div class="field-group">
+                <label for="min_loc">Min LOC in primary language</label>
+                <input type="number" id="min_loc" name="min_loc" value="30000" min="0" step="1000" />
+              </div>
+              <div class="field-group span-2 checkbox-group">
+                <label class="checkbox">
+                  <input type="checkbox" id="require_architecture" name="require_architecture" checked />
+                  Require substantial architecture (multi-directory, non-trivial structure)
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" id="allow_surface" name="allow_surface" />
+                  Allow surface-only repos (dashboards, scrapers, CLI glue, etc.)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button id="submit-btn" type="submit" class="btn btn-primary">
+              <span class="spinner" style="display: none"></span>
+              <span class="btn-text">Search repositories</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section id="loading" class="loading-panel" style="display: none">
+        <div class="loading-card">
+          <div class="spinner-large"></div>
+          <div class="loading-info">
+            <p id="loading-message" class="loading-title">Searching GitHub...</p>
+            <p class="loading-subtitle">This scans GitHub's indexed repositories for matches.</p>
+          </div>
+          <div class="progress-bar">
+            <div id="search-progress" class="progress-fill" style="width: 0%"></div>
+          </div>
+          <p id="loading-query" class="loading-query"></p>
+        </div>
+      </section>
+
+      <section id="error" class="error" style="display: none">
+        <div id="error-message" class="alert alert-error"></div>
+      </section>
+
+      <section id="results" class="results" style="display: none">
+        <div class="verdict-card">
+          <div class="verdict-header">
+            <div>
+              <span class="verdict-label">Results</span>
+              <h2 id="result-count" class="verdict-title">0 repositories</h2>
+            </div>
+          </div>
+          <p id="search-query" class="verdict-summary"></p>
+          <div id="search-results" class="search-results-list"></div>
+          <div id="pagination" class="pagination" style="display: none"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Built with Django · GitHub REST API</p>
+    </footer>
+  </div>
+
+  <script src="{% static 'js/search.js' %}?v=2"></script>
+</body>
+</html>

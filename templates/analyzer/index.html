@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RepoVerdict — GitHub Feature Verdict Analyzer</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app">
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+          <span>RepoVerdict</span>
+        </div>
+        <div class="nav-links">
+          <a href="{% url 'index' %}" class="nav-link active">Verdict</a>
+          <a href="{% url 'search' %}" class="nav-link">Search</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-content">
+        <h1>Know if your feature already exists</h1>
+        <p>
+          Scan a GitHub repository at a specific commit to see whether your idea is
+          <strong>new</strong>, <strong>open</strong>, <strong>in progress</strong>,
+          <strong>closed</strong>, <strong>existing</strong>, or <strong>rejected</strong>.
+        </p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel input-panel">
+        <form id="analyze-form" class="analyze-form">
+          <div class="form-section">
+            <h2 class="form-section-title">Repository</h2>
+            <div class="form-row">
+              <div class="field-group">
+                <label for="repo_url">GitHub repository URL</label>
+                <input type="url" id="repo_url" name="repo_url" placeholder="https://github.com/owner/repo" required />
+              </div>
+              <div class="field-group commit-field">
+                <label for="commit_hash">Base commit hash</label>
+                <input type="text" id="commit_hash" name="commit_hash" placeholder="abc1234..." required />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h2 class="form-section-title">Feature</h2>
+            <div class="form-grid">
+              <div class="field-group span-2">
+                <label for="feature_title">Title</label>
+                <input type="text" id="feature_title" name="feature_title" placeholder="Adaptive Memory Compaction for Token Budget Management" required />
+              </div>
+              <div class="field-group">
+                <label for="feature_category">Category</label>
+                <select id="feature_category" name="feature_category">
+                  <option value="Feature Request" selected>Feature Request</option>
+                  <option value="Bug Fix">Bug Fix</option>
+                  <option value="Optimization">Optimization</option>
+                  <option value="Refactor">Refactor</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="exploration_angle">Exploration angle</label>
+                <input type="text" id="exploration_angle" name="exploration_angle" placeholder="Edge Case & Robustness" />
+              </div>
+              <div class="field-group span-2">
+                <label for="feature_description">Description</label>
+                <textarea id="feature_description" name="feature_description" rows="5" placeholder="Describe the problem and the proposed solution..." required></textarea>
+              </div>
+              <div class="field-group span-2">
+                <label for="technical_scope">Technical scope</label>
+                <textarea id="technical_scope" name="technical_scope" rows="4" placeholder="Files, modules, classes, and estimated LOC..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-btn">
+              <span class="spinner" hidden></span>
+              <span class="btn-text">Analyze repository</span>
+            </button>
+            <button type="button" class="btn btn-ghost" id="load-example">Load sample request</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="loading-message" class="panel loading-panel" hidden>
+        <div class="loading-header">
+          <span class="spinner-large"></span>
+          <div>
+            <h3>Analyzing repository</h3>
+            <p id="loading-status">Fetching issues and pull requests from GitHub…</p>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-fill" style="width: 10%"></div>
+        </div>
+        <p class="loading-hint">This can take 30–90 seconds when related repositories are checked for prior art.</p>
+      </section>
+
+      <section id="error-message" class="alert alert-error" hidden></section>
+
+      <section id="results" class="results" hidden>
+        <div class="verdict-card">
+          <div class="verdict-header">
+            <div>
+              <span class="verdict-label">Verdict</span>
+              <h2 id="verdict-title" class="verdict-title">New</h2>
+            </div>
+            <div class="confidence">
+              <span class="confidence-label">Confidence</span>
+              <div class="confidence-ring">
+                <svg viewBox="0 0 36 36">
+                  <path class="confidence-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <path id="confidence-stroke" class="confidence-stroke" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+                <span id="confidence-value" class="confidence-value">0%</span>
+              </div>
+            </div>
+          </div>
+          <p id="verdict-summary" class="verdict-summary"></p>
+          <ul id="verdict-details" class="verdict-details"></ul>
+          <button id="download-pdf" class="btn btn-secondary btn-pdf" type="button">Download PDF</button>
+        </div>
+
+        <div class="results-grid">
+          <div class="results-main">
+            <div class="evidence-controls">
+              <div class="evidence-tabs">
+                <button class="tab active" data-tab="issues">Issues</button>
+                <button class="tab" data-tab="pull_requests">Pull Requests</button>
+                <button class="tab" data-tab="commits">Commits</button>
+                <button class="tab" data-tab="branches">Branches</button>
+              </div>
+              <div class="evidence-filter">
+                <input type="text" id="evidence-filter" placeholder="Filter by issue/PR number or title..." />
+              </div>
+            </div>
+            <div class="evidence-panels">
+              <div id="panel-issues" class="evidence-panel active"></div>
+              <div id="panel-pull_requests" class="evidence-panel"></div>
+              <div id="panel-commits" class="evidence-panel"></div>
+              <div id="panel-branches" class="evidence-panel"></div>
+            </div>
+          </div>
+
+          <aside class="keywords-section">
+            <h3>Matched keywords</h3>
+            <div id="keywords-list" class="keywords-list"></div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Built with Django · GitHub REST API · Optional OpenAI enhancement</p>
+    </footer>
+  </div>
+
+  <script src="{% static 'js/app.js' %}?v=2"></script>
+</body>
+</html>
