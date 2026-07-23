@@ -21,6 +21,22 @@ It then queries the GitHub API and produces a structured verdict such as:
 
 Each verdict is backed by cited issues, pull requests, commits, and branches.
 
+The Search page is tuned for Shipd Olympus repository discovery. It keeps the
+existing controls for stars, repository size, result count, LOC, licenses and
+language, but defaults to the hard constraints: public repos, 500+ stars, one
+target language, recent activity, 30k+ primary-language LOC, roughly 60MB or
+smaller clone size, and an allowed permissive license. Results are ranked by a
+Shipd fit score that combines LOC, architecture depth, recent merged-PR
+cross-component coupling, CI/docs/build signals, and optional domain ideas. If
+strict checks leave fewer than 20 results, the list stays short rather than
+including repos that fail hard requirements.
+
+If `OPENAI_API_KEY` is set, search results get an additional AI refinement pass:
+the shortlist is reranked and its coupling/risk/gap notes are rewritten from the
+GitHub metadata already collected. The key stays server-side and is never sent
+to browser JavaScript. If the OpenAI call fails or no key is configured, search
+falls back to the normal heuristic ranking.
+
 ## Tech stack
 
 - **Backend**: Python, Django, Django REST Framework
@@ -54,8 +70,10 @@ On Windows PowerShell, use:
 
 ```powershell
 Copy-Item .env.example .env
-Set-Content -Path .env -Value "GITHUB_TOKEN=your_token_here" -Encoding utf8
+Set-Content -Path .env -Value "GITHUB_TOKEN=your_github_token_here`nOPENAI_API_KEY=your_openai_api_key_here" -Encoding utf8
 ```
+
+After editing `.env`, restart `python manage.py runserver`.
 
 4. Run migrations:
 

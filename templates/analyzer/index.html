@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RepoVerdict — GitHub Feature Verdict Analyzer</title>
   {% load static %}
-  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3" />
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -133,6 +133,7 @@
           </div>
           <p id="verdict-summary" class="verdict-summary"></p>
           <ul id="verdict-details" class="verdict-details"></ul>
+          <section id="ai-review" class="ai-review" hidden></section>
           <button id="download-pdf" class="btn btn-secondary btn-pdf" type="button">Download PDF</button>
         </div>
 
@@ -170,6 +171,6 @@
     </footer>
   </div>
 
-  <script src="{% static 'js/app.js' %}?v=3"></script>
+  <script src="{% static 'js/app.js' %}?v=4"></script>
 </body>
 </html>

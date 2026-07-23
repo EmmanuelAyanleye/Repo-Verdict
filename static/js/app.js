@@ -25,6 +25,7 @@ const downloadPdfBtn = document.getElementById("download-pdf");
 const verdictTitle = document.getElementById("verdict-title");
 const verdictSummary = document.getElementById("verdict-summary");
 const verdictDetails = document.getElementById("verdict-details");
+const aiReview = document.getElementById("ai-review");
 const confidenceValue = document.getElementById("confidence-value");
 const confidenceStroke = document.getElementById("confidence-stroke");
 const keywordsList = document.getElementById("keywords-list");
@@ -47,6 +48,10 @@ function clearResults() {
   verdictTitle.className = "verdict-title";
   verdictSummary.textContent = "";
   verdictDetails.innerHTML = "";
+  if (aiReview) {
+    aiReview.hidden = true;
+    aiReview.innerHTML = "";
+  }
   confidenceValue.textContent = "0%";
   if (confidenceStroke) confidenceStroke.setAttribute("stroke-dasharray", "0, 100");
   keywordsList.innerHTML = "";
@@ -254,6 +259,7 @@ function renderResults(data) {
     li.textContent = detail;
     verdictDetails.appendChild(li);
   });
+  renderAiReview(data.ai_review || null);
 
   lastEvidenceData = data.evidence || {};
   renderEvidence("issues", data.evidence.issues || []);
@@ -273,6 +279,56 @@ function renderResults(data) {
 
   // Reset to first tab
   activateTab("issues");
+}
+
+function renderAiReview(review) {
+  if (!aiReview) return;
+  if (!review || !review.opinion) {
+    aiReview.hidden = true;
+    aiReview.innerHTML = "";
+    return;
+  }
+
+  const leads = Array.isArray(review.automated_leads) ? review.automated_leads : [];
+  const leadHtml = leads.length
+    ? leads.map((lead) => {
+        const title = escapeHtml(lead.title || "Automated lead");
+        const url = lead.url ? `<a href="${escapeHtml(lead.url)}" target="_blank" rel="noopener">${title}</a>` : title;
+        return `
+          <article class="ai-lead">
+            <span class="ai-lead-type">${escapeHtml(lead.type || "lead")}</span>
+            <h4>${url}</h4>
+            ${lead.note ? `<p>${escapeHtml(lead.note)}</p>` : ""}
+            ${lead.metric ? `<small>${escapeHtml(lead.metric)}</small>` : ""}
+          </article>
+        `;
+      }).join("")
+    : `<p class="ai-empty">No automated leads were confirmed; retained for transparency.</p>`;
+
+  aiReview.innerHTML = `
+    <div class="ai-review-header">
+      <span class="verdict-label">AI Review</span>
+      <span class="ai-source">${escapeHtml(review.source || "analysis")}</span>
+    </div>
+    <p class="ai-opinion">${escapeHtml(review.opinion)}</p>
+    <div class="ai-review-grid">
+      <div class="ai-review-card">
+        <span class="repo-stat-label">Overlap</span>
+        <strong>${escapeHtml(review.overlap_level || "Low")}</strong>
+        <p>${escapeHtml(review.overlap || "")}</p>
+      </div>
+      <div class="ai-review-card">
+        <span class="repo-stat-label">Off-scope risk</span>
+        <strong>${escapeHtml(review.scope_level || "Low")}</strong>
+        <p>${escapeHtml(review.scope || "")}</p>
+      </div>
+    </div>
+    <div class="ai-leads">
+      <span class="repo-stat-label">Automated leads (${leads.length})</span>
+      ${leadHtml}
+    </div>
+  `;
+  aiReview.hidden = false;
 }
 
 function renderEvidence(key, items) {

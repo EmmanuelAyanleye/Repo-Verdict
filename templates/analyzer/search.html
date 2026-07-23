@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RepoVerdict — GitHub Repository Search</title>
   {% load static %}
-  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3" />
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=11" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -32,7 +32,7 @@
       <div class="hero-content">
         <h1>Find permissive open-source repositories</h1>
         <p>
-          Search GitHub for repositories that are recently active, well-starred, and carry a permissive license.
+          Shortlist public repositories that fit Shipd Olympus challenge constraints.
         </p>
       </div>
     </header>
@@ -61,13 +61,13 @@
               </div>
               <div class="field-group">
                 <label for="max_size_mb">Max repo size (MB)</label>
-                <input type="number" id="max_size_mb" name="max_size_mb" placeholder="Optional" min="0" step="1" />
+                <input type="number" id="max_size_mb" name="max_size_mb" value="60" min="0" step="1" />
               </div>
               <div class="field-group span-2">
-                <label>Languages</label>
+                <label>Target language</label>
                 <div class="checkbox-group" id="languages">
                   <label class="checkbox"><input type="checkbox" value="TypeScript" checked /> TypeScript</label>
-                  <label class="checkbox"><input type="checkbox" value="JavaScript" checked /> JavaScript</label>
+                  <label class="checkbox"><input type="checkbox" value="JavaScript" /> JavaScript</label>
                   <label class="checkbox"><input type="checkbox" value="Python" /> Python</label>
                   <label class="checkbox"><input type="checkbox" value="Go" /> Go</label>
                   <label class="checkbox"><input type="checkbox" value="Rust" /> Rust</label>
@@ -79,12 +79,12 @@
                 <label>Permissive licenses</label>
                 <div class="checkbox-group" id="licenses">
                   <label class="checkbox"><input type="checkbox" value="MIT" checked /> MIT</label>
-                  <label class="checkbox"><input type="checkbox" value="BSD-2-Clause" /> BSD-2-Clause</label>
-                  <label class="checkbox"><input type="checkbox" value="BSD-3-Clause" /> BSD-3-Clause</label>
-                  <label class="checkbox"><input type="checkbox" value="BSD-4-Clause" /> BSD-4-Clause</label>
-                  <label class="checkbox"><input type="checkbox" value="Boost" /> Boost / BSL-1.0</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-2-Clause" checked /> BSD-2-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-3-Clause" checked /> BSD-3-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="BSD-4-Clause" checked /> BSD-4-Clause</label>
+                  <label class="checkbox"><input type="checkbox" value="Boost" checked /> Boost / BSL-1.0</label>
                   <label class="checkbox"><input type="checkbox" value="Apache-2.0" checked /> Apache-2.0</label>
-                  <label class="checkbox"><input type="checkbox" value="Apache" /> Apache</label>
+                  <label class="checkbox"><input type="checkbox" value="Apache" checked /> Apache</label>
                   <label class="checkbox"><input type="checkbox" value="CC-BY-4.0" /> CC-BY-4.0</label>
                   <label class="checkbox"><input type="checkbox" value="CC-BY-3.0" /> CC-BY-3.0</label>
                   <label class="checkbox"><input type="checkbox" value="CC-BY-2.0" /> CC-BY-2.0</label>
@@ -95,13 +95,18 @@
                 </div>
               </div>
               <div class="field-group span-2">
+                <label for="domain_ideas">Domain ideas</label>
+                <input type="text" id="domain_ideas" name="domain_ideas" placeholder="query engines, compilers, distributed KV stores, type checkers" />
+                <p class="field-hint">Optional ranking bias, not a hard filter.</p>
+              </div>
+              <div class="field-group span-2">
                 <label for="custom_license">Custom license (optional)</label>
                 <input type="text" id="custom_license" name="custom_license" placeholder="e.g. MPL-2.0, ISC" />
-                <p class="field-hint">Comma-separated license keys to add to the selected ones.</p>
+                <p class="field-hint">Shipd mode will ignore licenses outside the allowed permissive list.</p>
               </div>
               <div class="field-group">
                 <label for="result_limit">Max results</label>
-                <input type="number" id="result_limit" name="result_limit" value="30" min="1" max="100" step="1" />
+                <input type="number" id="result_limit" name="result_limit" value="20" min="1" max="100" step="1" />
               </div>
               <div class="field-group">
                 <label for="min_loc">Min LOC in primary language</label>
@@ -167,6 +172,6 @@
     </footer>
   </div>
 
-  <script src="{% static 'js/search.js' %}?v=3"></script>
+  <script src="{% static 'js/search.js' %}?v=11"></script>
 </body>
 </html>

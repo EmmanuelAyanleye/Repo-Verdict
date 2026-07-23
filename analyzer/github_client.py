@@ -78,9 +78,15 @@ class GitHubClient:
         if response.status_code == 403 and response.headers.get("X-RateLimit-Remaining") == "0":
             reset_at = int(response.headers.get("X-RateLimit-Reset", 0))
             reset_time = datetime.fromtimestamp(reset_at).isoformat() if reset_at else "soon"
+            resource = response.headers.get("X-RateLimit-Resource", "api")
+            token_hint = (
+                f"Authenticated GitHub {resource} rate limit exceeded."
+                if self.token
+                else "GitHub API rate limit exceeded. Set a GITHUB_TOKEN to raise the limit."
+            )
             raise GitHubRateLimitError(
-                f"GitHub API rate limit exceeded. Resets at {reset_time}. "
-                "Set a GITHUB_TOKEN to raise the limit."
+                f"{token_hint} Resets at {reset_time}. "
+                "GitHub search has a much smaller per-minute bucket than normal API calls."
             )
         return response
 
@@ -212,6 +218,19 @@ class GitHubClient:
     def get_pull_requests(self, owner: str, repo: str, state: str = "all") -> list:
         params = {"state": state, "sort": "updated", "direction": "desc"}
         return self._paginate(f"/repos/{owner}/{repo}/pulls", params)
+
+    def get_recent_merged_pull_requests(self, owner: str, repo: str, limit: int = 8) -> list:
+        """Fetch recently updated PRs and keep merged ones for coupling checks."""
+        prs = self.get_pull_requests(owner, repo, state="closed")
+        merged = [pr for pr in prs if pr.get("merged_at")]
+        return merged[:limit]
+
+    def get_recent_workflow_runs(self, owner: str, repo: str, limit: int = 4) -> list:
+        data = self._get(
+            f"/repos/{owner}/{repo}/actions/runs",
+            params={"per_page": limit, "status": "completed"},
+        )
+        return data.get("workflow_runs", []) if data else []
 
     def get_branches(self, owner: str, repo: str) -> list:
         return self._paginate(f"/repos/{owner}/{repo}/branches")

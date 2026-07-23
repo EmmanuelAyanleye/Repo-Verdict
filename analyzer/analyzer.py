@@ -95,6 +95,7 @@ class AnalysisResult:
     evidence: dict[str, list[EvidenceItem]]
     details: list[str]
     feature_keywords: list[str] = field(default_factory=list)
+    ai_review: dict[str, Any] = field(default_factory=dict)
 
 
 class FeatureAnalyzer:
@@ -215,10 +216,11 @@ class FeatureAnalyzer:
         )
 
         # Optional LLM refinement (keeps the same cited items from keyword analysis)
+        ai_review = self._build_ai_review(feature, verdict, confidence, scored_issues, scored_prs, commit_items, scored_branches)
         if self.llm_client:
-            verdict, confidence, summary, details, cited = self._llm_enhance(
+            verdict, confidence, summary, details, cited, ai_review = self._llm_enhance(
                 feature, verdict, confidence, summary, details, cited,
-                scored_issues, scored_prs, commit_items, scored_branches
+                scored_issues, scored_prs, commit_items, scored_branches, ai_review
             )
 
         # Make sure the evidence that drove the verdict is returned to the frontend
@@ -254,6 +256,7 @@ class FeatureAnalyzer:
             },
             details=details,
             feature_keywords=keywords,
+            ai_review=ai_review,
         )
 
     def _search_terms(self, feature: dict[str, Any], keywords: list[str]) -> list[str]:
@@ -1005,10 +1008,11 @@ weighted heavily during scoring.
         prs: list[EvidenceItem],
         commits: list[EvidenceItem],
         branches: list[EvidenceItem],
-    ) -> tuple[str, float, str, list[str], list[EvidenceItem]]:
+        ai_review: dict[str, Any],
+    ) -> tuple[str, float, str, list[str], list[EvidenceItem], dict[str, Any]]:
         """Use an LLM to refine the verdict and summary based on fetched evidence."""
         if not self.llm_client:
-            return verdict, confidence, summary, details, cited
+            return verdict, confidence, summary, details, cited, ai_review
 
         evidence_text = self._evidence_to_text(issues, prs, commits, branches)
         feature_text = self._build_feature_text(feature)
@@ -1022,14 +1026,30 @@ A developer wants to contribute the following feature to a GitHub repository.
 --- REPOSITORY EVIDENCE ---
 {evidence_text}
 
-Based ONLY on the evidence above, classify the feature into EXACTLY ONE verdict:
+Based ONLY on the structured evidence above, classify the feature into EXACTLY ONE verdict:
 new, existing, open, in_progress, closed, or rejected.
+
+Important reasoning rules:
+- Prefer semantic implementation overlap over raw keyword count.
+- A merged PR with high relevance usually means existing, even if the exact title differs.
+- An open PR actively implementing the behavior means in_progress.
+- An open issue tracking the same behavior means open.
+- Explicit maintainer decline/wontfix/not-planned language means rejected only when the topic matches.
+- Weak generic overlap should remain new or low-confidence closed, not existing.
+- Related/fork/same-name repository evidence can indicate public prior art; mention that distinction in the summary.
 
 Return a JSON object with these keys:
 - verdict: one of new/existing/open/in_progress/closed/rejected
 - confidence: float between 0 and 1
 - summary: one concise paragraph explaining the verdict
 - details: list of 2-5 bullet strings citing specific issue/PR/commit numbers and URLs
+- ai_review: object with keys:
+  - opinion: one reviewer-style sentence starting with Pass, Caution, or Fail
+  - overlap_level: Low, Medium, or High
+  - overlap: 1-2 sentences explaining implementation/scope overlap with the strongest evidence
+  - scope_level: Low, Medium, or High
+  - scope: 1-2 sentences explaining repo-goal/scope alignment or conflict
+  - automated_leads: list of 0-3 objects with type, title, note, metric, and url
 
 Do not invent evidence. If the evidence is weak, return verdict "new" with lower confidence.
 """
@@ -1055,29 +1075,142 @@ Do not invent evidence. If the evidence is weak, return verdict "new" with lower
             confidence = float(result.get("confidence", confidence))
             summary = result.get("summary", summary)
             details = result.get("details", details)
+            if isinstance(result.get("ai_review"), dict):
+                ai_review = self._normalize_ai_review(result["ai_review"], verdict, issues, prs, commits, branches)
         except Exception:
             # If LLM fails, keep keyword-based result
             pass
-        return verdict, confidence, summary, details, cited
+        return verdict, confidence, summary, details, cited, ai_review
+
+    def _build_ai_review(
+        self,
+        feature: dict,
+        verdict: str,
+        confidence: float,
+        issues: list[EvidenceItem],
+        prs: list[EvidenceItem],
+        commits: list[EvidenceItem],
+        branches: list[EvidenceItem],
+    ) -> dict[str, Any]:
+        title = feature.get("title") or "the requested feature"
+        strong_items = [item for item in issues + prs + commits + branches if item.relevance >= 0.45]
+        top = strong_items[0] if strong_items else None
+        if verdict in {"existing", "in_progress"}:
+            opinion = (
+                f"Caution: {title} has meaningful overlap with public repository evidence; "
+                "confirm the task boundary is distinct before submitting."
+            )
+            overlap_level = "High"
+        elif verdict in {"open", "closed", "rejected"}:
+            opinion = (
+                f"Caution: {title} is repo-relevant but has prior discussion or closure signals; "
+                "review the linked evidence before treating it as cleanly new."
+            )
+            overlap_level = "Medium"
+        else:
+            opinion = (
+                f"Pass: {title} appears distinct and repo-aligned; no confirmed public solution, "
+                "maintainer rejection, removal, or hard scope conflict was found."
+            )
+            overlap_level = "Low" if confidence < 0.7 else "Medium"
+
+        if top:
+            overlap = (
+                f"Strongest lead is {top.type} #{top.number or '-'}: {top.title}. "
+                f"Matched terms include {', '.join(top.matched_keywords[:5]) or 'semantic repository evidence'}."
+            )
+        else:
+            overlap = "No high-confidence issue, PR, commit, or branch evidence matched the requested behavior."
+
+        leads = []
+        for item in (issues + prs + commits + branches)[:6]:
+            if item.relevance < 0.25:
+                continue
+            leads.append({
+                "type": item.type,
+                "title": item.title,
+                "note": item.reason,
+                "metric": f"relevance {item.relevance:.2f}",
+                "url": item.url,
+            })
+            if len(leads) >= 3:
+                break
+
+        return {
+            "opinion": opinion,
+            "overlap_level": overlap_level,
+            "overlap": overlap,
+            "scope_level": "Low",
+            "scope": "No fetched evidence shows a repo-goal conflict; validate against README/design docs before final submission.",
+            "automated_leads": leads,
+            "source": "deterministic" if not self.llm_client else "deterministic fallback",
+        }
+
+    def _normalize_ai_review(
+        self,
+        review: dict[str, Any],
+        verdict: str,
+        issues: list[EvidenceItem],
+        prs: list[EvidenceItem],
+        commits: list[EvidenceItem],
+        branches: list[EvidenceItem],
+    ) -> dict[str, Any]:
+        fallback = self._build_ai_review({}, verdict, 0.0, issues, prs, commits, branches)
+        normalized = {
+            "opinion": str(review.get("opinion") or fallback["opinion"]),
+            "overlap_level": str(review.get("overlap_level") or fallback["overlap_level"]),
+            "overlap": str(review.get("overlap") or fallback["overlap"]),
+            "scope_level": str(review.get("scope_level") or fallback["scope_level"]),
+            "scope": str(review.get("scope") or fallback["scope"]),
+            "automated_leads": review.get("automated_leads") if isinstance(review.get("automated_leads"), list) else fallback["automated_leads"],
+            "source": "openai",
+        }
+        normalized["automated_leads"] = [
+            {
+                "type": str(item.get("type", "lead")) if isinstance(item, dict) else "lead",
+                "title": str(item.get("title", "")) if isinstance(item, dict) else str(item),
+                "note": str(item.get("note", "")) if isinstance(item, dict) else "",
+                "metric": str(item.get("metric", "")) if isinstance(item, dict) else "",
+                "url": str(item.get("url", "")) if isinstance(item, dict) else "",
+            }
+            for item in normalized["automated_leads"][:3]
+        ]
+        return normalized
 
     @staticmethod
+    def _evidence_item_to_dict(item: EvidenceItem) -> dict:
+        return {
+            "type": item.type,
+            "number": item.number,
+            "title": item.title,
+            "url": item.url,
+            "state": item.state,
+            "merged": item.merged,
+            "merged_at": item.merged_at,
+            "closed_at": item.closed_at,
+            "repository": item.repository,
+            "repository_relation": item.repository_relation,
+            "relevance": round(item.relevance, 3),
+            "distinctive_matches": item.distinctive_matches,
+            "matched_keywords": item.matched_keywords[:12],
+            "labels": item.labels[:12],
+            "is_rejection": item.is_rejection,
+            "reason": item.reason,
+            "body_excerpt": item.body[:900],
+        }
+
+    @classmethod
     def _evidence_to_text(
+        cls,
         issues: list[EvidenceItem],
         prs: list[EvidenceItem],
         commits: list[EvidenceItem],
         branches: list[EvidenceItem],
     ) -> str:
-        lines: list[str] = []
-        for i in issues[:8]:
-            lines.append(
-                f"Issue #{i.number} ({i.state}): {i.title}\nURL: {i.url}\nLabels: {', '.join(i.labels)}\n"
-            )
-        for p in prs[:8]:
-            lines.append(
-                f"PR #{p.number} ({p.state}): {p.title}\nURL: {p.url}\nLabels: {', '.join(p.labels)}\n"
-            )
-        for c in commits[:5]:
-            lines.append(f"Commit {c.title}\nURL: {c.url}\n")
-        for b in branches[:5]:
-            lines.append(f"Branch: {b.title}\nURL: {b.url}\n")
-        return "\n".join(lines)
+        evidence = {
+            "issues": [cls._evidence_item_to_dict(i) for i in issues[:12]],
+            "pull_requests": [cls._evidence_item_to_dict(p) for p in prs[:12]],
+            "commits": [cls._evidence_item_to_dict(c) for c in commits[:6]],
+            "branches": [cls._evidence_item_to_dict(b) for b in branches[:6]],
+        }
+        return json.dumps(evidence, ensure_ascii=False, indent=2)
