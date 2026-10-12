@@ -1,5 +1,7 @@
 # RepoVerdict
 
+**Project page:** [emmanuelayanleye.com/repoverdict](https://emmanuelayanleye.com/repoverdict/) | Built by [Emmanuel Ayanleye](https://emmanuelayanleye.com) | [Contributing guide](CONTRIBUTING.md)
+
 A beautiful Django web tool that analyzes a GitHub repository at a specific commit and tells you whether a proposed feature/enhancement/bugfix/refactor already exists, is open, closed, rejected, or in progress.
 
 ## What it does
